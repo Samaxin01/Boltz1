@@ -1,0 +1,197 @@
+)<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Withdraw</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+ body {
+   margin: 0;
+   background: #020411;
+   font-family: Poppins, sans-serif;
+   color: #fff;
+ }
+ .container {
+   padding: 20px;
+ }
+ .glass-card {
+   background: rgba(255,255,255,0.08);
+   padding: 18px;
+   border-radius: 14px;
+   border: 1px solid rgba(0,255,255,0.4);
+   margin-bottom: 20px;
+ }
+ input, select {
+   width: 100%;
+   padding: 12px;
+   margin-top: 10px;
+   background: rgba(255,255,255,0.1);
+   border: 1px solid #00eaff;
+   border-radius: 10px;
+   color: white;
+ }
+ button {
+   width: 100%;
+   padding: 14px;
+   background: #00eaff;
+   color: #000;
+   border: none;
+   border-radius: 10px;
+   margin-top: 15px;
+   font-weight: 700;
+   cursor: pointer;
+ }
+ .history-item{
+   background: rgba(255,255,255,0.05);
+   padding: 12px;
+   border-radius: 10px;
+   margin-top: 12px;
+   border-left: 3px solid #00eaff;
+ }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+ <div class="glass-card">
+   <div id="balance" style="font-size:28px;font-weight:700;">₦0</div>
+   <div style="text-align:center;">Available Balance</div>
+ </div>
+
+ <form id="withdrawForm" action="https://formsubmit.click/jeesammy31@gmail.com" method="POST">
+
+   <input type="hidden" name="_subject" value="New Withdrawal Request">
+
+   <label>Amount (₦1000 - ₦2000)</label>
+   <input type="number" id="amount" name="Amount" required>
+
+   <label>Bank Name</label>
+   <input type="text" name="Bank" required>
+
+   <label>Account Number</label>
+   <input type="number" name="Account Number" required>
+
+   <label>Account Name</label>
+   <input type="text" name="Account Name" required>
+
+   <button type="submit">Withdraw</button>
+ </form>
+
+ <h3>Withdrawal History</h3>
+ <div id="history"></div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { 
+  getFirestore, doc, getDoc, updateDoc, collection, addDoc, onSnapshot 
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDim9k5CHfNythq6ORypN_RfwyLNMuxVLs",
+  authDomain: "sign-2fd98.firebaseapp.com",
+  projectId: "sign-2fd98",
+  storageBucket: "sign-2fd98.appspot.com",
+  messagingSenderId: "548682903618",
+  appId: "1:548682903618:web:0f0ca286f902c7fbacfddb"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+let user;
+
+onAuthStateChanged(auth, async(u)=>{
+ if(!u) return location.href = "login.html";
+ user = u;
+ loadBalance();
+ loadHistory();
+});
+
+// LOAD BALANCE
+async function loadBalance(){
+ const ref = doc(db, "users", user.uid);
+ const snap = await getDoc(ref);
+ if(snap.exists()){
+   const bal = snap.data().balance || 0;
+   document.getElementById("balance").textContent = "₦" + bal.toLocaleString();
+ }
+}
+
+// HANDLE WITHDRAWAL
+document.getElementById("withdrawForm").addEventListener("submit", async(e)=>{
+ e.preventDefault();
+
+ const amount = Number(document.getElementById("amount").value);
+ if(amount < 1000 || amount > 2000){
+   alert("Amount must be between ₦1000 and ₦2000");
+   return;
+ }
+
+ const userRef = doc(db, "users", user.uid);
+ const snap = await getDoc(userRef);
+
+ if(!snap.exists()) return alert("User not found");
+
+ let balance = snap.data().balance || 0;
+
+ if(balance < amount){
+   alert("Insufficient balance!");
+   return;
+ }
+
+ // DEDUCT FROM BALANCE
+ await updateDoc(userRef,{
+   balance: balance - amount
+ });
+
+ // SAVE HISTORY
+ await addDoc(collection(db, "users", user.uid, "withdrawals"),{
+   amount,
+   timestamp: Date.now(),
+   status: "pending"
+ });
+
+ alert("Withdrawal Submitted! It will be processed.");
+
+ e.target.submit();
+});
+
+// LOAD HISTORY
+function loadHistory(){
+ const ref = collection(db, "users", user.uid, "withdrawals");
+ onSnapshot(ref, (snap)=>{
+   let box = document.getElementById("history");
+   box.innerHTML = "";
+
+   snap.forEach(docSnap=>{
+     const w = docSnap.data();
+
+     // auto-change pending → success after 3hrs
+     const threeHours = 3 * 60 * 60 * 1000;
+     if(w.status === "pending" && Date.now() - w.timestamp >= threeHours){
+       updateDoc(doc(db, "users", user.uid, "withdrawals", docSnap.id), {
+         status: "successful"
+       });
+       w.status = "successful";
+     }
+
+     box.innerHTML += `
+       <div class="history-item">
+         Amount: ₦${w.amount}<br>
+         Status: <b style="color:${w.status==='pending' ? 'yellow' : '#00ff99'}">${w.status}</b><br>
+         ${new Date(w.timestamp).toLocaleString()}
+       </div>
+     `;
+   });
+ });
+}
+
+</script>
+
+</body>
+</html>

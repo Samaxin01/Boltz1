@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Buy Data — Fern</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#010014; --card:#071326; --accent:#00FFF5; --muted:#7f9aa8;
+  }
+  *{box-sizing:border-box;font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,Arial;}
+  body{margin:0;min-height:100vh;background:radial-gradient(800px 400px at 10% 8%, rgba(0,212,255,0.03), transparent), linear-gradient(180deg,#000015 0%, #03020b 100%); color:#e6f7ff; padding:28px; display:flex;justify-content:center;}
+  .wrap{width:100%;max-width:980px}
+  .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:22px; border-radius:14px; border:1px solid rgba(0,213,255,0.04); box-shadow:0 10px 30px rgba(0,0,0,0.6)}
+  h1{margin:0 0 8px 0}
+  .muted{color:var(--muted);font-size:13px}
+  .row{display:flex;gap:12px;align-items:center;margin-top:12px}
+  select,input{padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:rgba(255,255,255,0.03);color:#fff;outline:none;width:100%}
+  button{padding:12px 14px;border-radius:10px;border:0;cursor:pointer;font-weight:700}
+  .btn-primary{background:linear-gradient(90deg,var(--accent),#00D4FF);color:#001}
+  .btn-ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--accent)}
+  .balance{font-size:22px;font-weight:700;color:var(--accent)}
+  .plans {margin-top:14px;display:grid;gap:10px}
+  .plan {padding:12px;border-radius:10px;background:rgba(255,255,255,0.02);display:flex;justify-content:space-between;align-items:center;border:1px solid rgba(255,255,255,0.02)}
+  .history{margin-top:16px;max-height:220px;overflow:auto}
+  .history-item{padding:8px;border-bottom:1px solid rgba(255,255,255,0.03);font-size:13px;color:var(--muted)}
+  /* iPhone popup */
+  .popup {position:fixed;inset:0;display:grid;place-items:center;z-index:9999;pointer-events:none;opacity:0;transition:.25s}
+  .popup.active{opacity:1;pointer-events:auto}
+  .popup-box{background:#fff;color:#000;padding:18px;border-radius:18px;width:90%;max-width:380px;text-align:center;box-shadow:0 20px 40px rgba(0,0,0,0.15)}
+  .popup-btn{margin-top:12px;padding:10px 14px;border-radius:12px;border:0;background:#007aff;color:white;font-weight:700}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:16px">
+        <div style="width:64px;height:64px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#00D4FF);display:grid;place-items:center;color:#001;font-weight:800">DN</div>
+        <div>
+          <h1>Buy Data</h1>
+          <div class="muted">Use your balance to buy airtime/data instantly</div>
+        </div>
+        <div style="margin-left:auto;text-align:right">
+          <div class="muted">Balance</div>
+          <div id="balanceEl" class="balance">₦0.00000000</div>
+        </div>
+      </div>
+
+      <div style="margin-top:18px">
+        <div class="row">
+          <select id="networkSelect">
+            <option value="mtn">MTN</option>
+            <option value="airtel">Airtel</option>
+            <option value="glo">Glo</option>
+            <option value="9mobile">9mobile</option>
+          </select>
+          <input id="phoneInput" placeholder="Recipient phone (e.g. 08012345678)" />
+        </div>
+
+        <div class="plans" id="plansWrap"></div>
+
+        <div style="display:flex;gap:10px;margin-top:14px">
+          <button id="buyBtn" class="btn-primary" style="flex:1">Buy Data</button>
+          <button id="refreshBtn" class="btn-ghost">Refresh</button>
+        </div>
+
+        <div class="history" id="history">
+          <h3 style="margin:12px 0 8px 0">Purchase History</h3>
+          <div id="historyList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- iPhone popup -->
+  <div id="popup" class="popup"><div class="popup-box">
+    <h3 id="popupTitle">Success</h3>
+    <p id="popupMsg">Message</p>
+    <button class="popup-btn" onclick="closePopup()">OK</button>
+  </div></div>
+
+<script type="module">
+  // ---------- FIREBASE (Fern project's config) ----------
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+  import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+  import {
+    getFirestore, doc, getDoc, runTransaction, collection, addDoc, onSnapshot, serverTimestamp, query, orderBy, getDocs, updateDoc
+  } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDim9k5CHfNythq6ORypN_RfwyLNMuxVLs",
+    authDomain: "sign-2fd98.firebaseapp.com",
+    projectId: "sign-2fd98",
+    storageBucket: "sign-2fd98.appspot.com",
+    messagingSenderId: "548682903618",
+    appId: "1:548682903618:web:0f0ca286f902c7fbacfddb"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  // ---------- API CONFIG ----------
+  const API_KEY = '69MOSFI0YN5LPTaWbZXeBJ2EQDCR3cd1VAK8U7GfH45286v9jb8efL0Ja5ECkBDbGAF';
+  const API_ENDPOINT = `https://sabuss.com/vtu/api/buy/${API_KEY}`;
+  const PIN = '0000'; // from your snippet — change if different
+
+  // ---------- PLAN MAP (from you) ----------
+  // plan_id => {label, price, network}
+  const PLANS = {
+    mtn: [
+      { id: '1', label: '100MB', price: 100 },
+      { id: '2', label: '1GB', price: 500 },
+      { id: '3', label: '2GB', price: 900 }
+    ],
+    airtel: [
+      { id: '10', label: '500MB', price: 290 },
+      { id: '11', label: '1GB', price: 480 }
+    ],
+    glo: [
+      { id: '20', label: '1GB', price: 450 }
+    ],
+    '9mobile': [
+      { id: '30', label: '1.5GB', price: 900 }
+    ]
+  };
+
+  // ---------- UI refs ----------
+  const networkSelect = document.getElementById('networkSelect');
+  const plansWrap = document.getElementById('plansWrap');
+  const phoneInput = document.getElementById('phoneInput');
+  const buyBtn = document.getElementById('buyBtn');
+  const balanceEl = document.getElementById('balanceEl');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const historyList = document.getElementById('historyList');
+
+  const popup = document.getElementById('popup');
+  const popupTitle = document.getElementById('popupTitle');
+  const popupMsg = document.getElementById('popupMsg');
+
+  // state
+  let uid = null;
+  let userBalance = 0;
+  let selectedPlanId = null;
+  let selectedPlanPrice = 0;
+  let selectedNetwork = 'mtn';
+
+  // render plans for selected network
+  function renderPlans(network){
+    plansWrap.innerHTML = '';
+    const plans = PLANS[network] || [];
+    plans.forEach(p=>{
+      const el = document.createElement('div');
+      el.className = 'plan';
+      el.innerHTML = `<div><strong>${p.label}</strong><div class="muted">₦${p.price.toLocaleString()}</div></div>
+                      <div><button class="btn-ghost" data-id="${p.id}" data-price="${p.price}">Select</button></div>`;
+      plansWrap.appendChild(el);
+    });
+
+    // attach select handlers
+    plansWrap.querySelectorAll('button').forEach(b=>{
+      b.addEventListener('click', (ev)=>{
+        plansWrap.querySelectorAll('.plan').forEach(c=>c.style.boxShadow='none');
+        const parent = b.closest('.plan');
+        parent.style.boxShadow = `0 6px 20px rgba(0,255,245,0.08)`;
+        selectedPlanId = b.dataset.id;
+        selectedPlanPrice = Number(b.dataset.price);
+        selectedNetwork = network;
+      });
+    });
+  }
+
+  networkSelect.addEventListener('change', (e)=> {
+    renderPlans(e.target.value);
+  });
+
+  refreshBtn.addEventListener('click', ()=> refreshAll());
+
+  // auth
+  onAuthStateChanged(auth, async user => {
+    if(!user) return location.href = 'login.html';
+    uid = user.uid;
+    await refreshAll();
+
+    // live listen to purchases (so history updates)
+    const q = query(collection(db, 'users', uid, 'dataPurchases'), orderBy('createdAt','desc'));
+    onSnapshot(q, snap => {
+      renderHistory(snapshotToArray(snap));
+    });
+  });
+
+  // helper to convert snapshot
+  function snapshotToArray(snap){
+    const arr = [];
+    snap.forEach(d=> { arr.push({ id: d.id, ...d.data() }); });
+    return arr;
+  }
+
+  // refresh balance and plans + history
+  async function refreshAll(){
+    // load user balance
+    const uRef = doc(db, 'users', uid);
+    const uSnap = await getDoc(uRef);
+    userBalance = uSnap.exists() ? (uSnap.data().balance || 0) : 0;
+    balanceEl.innerText = '₦' + Number(userBalance).toLocaleString(undefined, {minimumFractionDigits:8, maximumFractionDigits:8});
+
+    // render default plans
+    renderPlans(networkSelect.value);
+
+    // load history once
+    const hCol = collection(db, 'users', uid, 'dataPurchases');
+    const hSnap = await getDocs(query(hCol, orderBy('createdAt','desc')));
+    const items = [];
+    hSnap.forEach(d=> items.push({ id: d.id, ...d.data() }));
+    renderHistory(items);
+  }
+
+  // buy button handler
+  buyBtn.addEventListener('click', async ()=>{
+    const phone = phoneInput.value.trim();
+    if(!phone) return showPopup('Error','Enter recipient phone number');
+
+    if(!selectedPlanId) return showPopup('Error','Select a plan');
+
+    // check balance
+    if(userBalance < selectedPlanPrice) return showPopup('Error','Insufficient balance');
+
+    // atomic: deduct balance & create purchase doc
+    try {
+      await runTransaction(db, async (t)=>{
+        const uRef = doc(db, 'users', uid);
+        const uDoc = await t.get(uRef);
+        if(!uDoc.exists()) throw 'User missing';
+        const bal = uDoc.data().balance || 0;
+        if(bal < selectedPlanPrice) throw 'Insufficient balance';
+        // deduct
+        t.update(uRef, { balance: bal - selectedPlanPrice });
+
+        // create purchase doc with status = processing (we will update after API)
+        const pRef = collection(db, 'users', uid, 'dataPurchases');
+        // addDoc can't be used with transaction; use addDoc outside if needed.
+        // So we create a doc after txn completes to ensure balance deducted first
+      });
+    } catch (err){
+      console.error('transaction failed', err);
+      return showPopup('Error', 'Purchase failed: ' + err);
+    }
+
+    // create purchase doc (atomic deduction already done)
+    const purchaseRef = await addDoc(collection(db, 'users', uid, 'dataPurchases'), {
+      planId: selectedPlanId,
+      network: selectedNetwork,
+      phone: phone,
+      price: selectedPlanPrice,
+      status: 'processing',
+      createdAt: serverTimestamp(),
+      apiResponse: null,
+      reference: 'FERN-' + Date.now()
+    });
+
+    // call external API
+    showPopup('Processing', 'Sending request to provider...');
+    const formData = new FormData();
+    formData.append('pin', PIN);
+    formData.append('plan_id', selectedPlanId);
+    formData.append('phone', phone);
+    formData.append('reference', purchaseRef.id);
+
+    // Attempt client-side fetch to Sabuss. If your provider blocks CORS, set up a simple PHP endpoint and call that instead.
+    let apiJson = null;
+    try {
+      const res = await fetch(API_ENDPOINT, {
+        method: 'POST',
+        body: formData
+      });
+      apiJson = await res.json();
+    } catch (e) {
+      // network/CORS error — mark purchase as pending and inform user
+      console.error('API fetch error', e);
+      await updateDoc(purchaseRef, { status: 'pending', apiResponse: { error: 'network' }});
+      return showPopup('Pending', 'Request queued. Provider could not be reached from browser (CORS). Admin will process.');
+    }
+
+    // process API response (Sabuss returns JSON — we expect code in apiJson.status or apiJson.code)
+    // Typical PHP snippet returns an array — check the real response shape. We'll handle common cases.
+    let code = null;
+    if(apiJson && (apiJson.status || apiJson.code)) code = apiJson.status || apiJson.code;
+    // Sometimes provider returns numeric HTTP code string in `response_code` or `requestId`. Adjust if needed.
+
+    // Normalize code into numbers if possible
+    if(typeof code === 'string' && !isNaN(Number(code))) code = Number(code);
+    if(typeof code === 'object' && code.code) code = Number(code.code);
+
+    // Map codes:
+    // 200 success, 400 pending, 800 failed, 900 reversed
+    let newStatus = 'pending';
+    if(code === 200) newStatus = 'successful';
+    else if(code === 400) newStatus = 'pending';
+    else if(code === 800) newStatus = 'failed';
+    else if(code === 900) newStatus = 'reversed';
+    else {
+      // If no code provided, try to inspect apiJson.success or apiJson.message
+      if(apiJson && (apiJson.success === true || apiJson.message && /success/i.test(apiJson.message))) newStatus = 'successful';
+      else newStatus = 'pending';
+    }
+
+    // Update purchase doc with API response & status
+    await updateDoc(purchaseRef, {
+      status: newStatus,
+      apiResponse: apiJson,
+      updatedAt: serverTimestamp()
+    });
+
+    // Refund logic for failed/reversed: refund amount to user
+    if(newStatus === 'failed' || newStatus === 'reversed'){
+      // refund
+      await runTransaction(db, async (t)=>{
+        const uRef = doc(db, 'users', uid);
+        const uDoc = await t.get(uRef);
+        const bal = uDoc.exists() ? (uDoc.data().balance || 0) : 0;
+        t.update(uRef, { balance: bal + selectedPlanPrice });
+      });
+      showPopup('Failed', 'Purchase failed — amount has been refunded.');
+    } else if(newStatus === 'successful'){
+      showPopup('Success', 'Data purchase successful! Check your network.');
+    } else {
+      showPopup('Pending', 'Purchase is pending. Provider will update status soon.');
+    }
+
+    // refresh local balance & history
+    await refreshAll();
+  });
+
+  // render history
+  function renderHistory(items){
+    // items may be passed from refreshAll or snapshot
+    if(!items) items = [];
+    historyList.innerHTML = '';
+    items.forEach(it=>{
+      const time = it.createdAt && it.createdAt.toDate ? it.createdAt.toDate().toLocaleString() : (it.createdAt ? new Date(it.createdAt).toLocaleString() : '');
+      const status = it.status || 'processing';
+      const html = `<div class="history-item">
+        <div><strong>${it.network?.toUpperCase() || it.network}</strong> ${it.planId} • ₦${Number(it.price).toLocaleString()}</div>
+        <div class="muted">${it.phone} • ${time}</div>
+        <div>Status: <strong style="color:${status==='successful'?'#00ff90':status==='failed'?'#ff6b6b':'#ffd166'}">${status.toUpperCase()}</strong></div>
+      </div>`;
+      historyList.insertAdjacentHTML('beforeend', html);
+    });
+  }
+
+  // helper to show popup
+  function showPopup(title, message){
+    popupTitle.innerText = title;
+    popupMsg.innerText = message;
+    popup.classList.add('active');
+    // auto close in 3s
+    setTimeout(()=>{ popup.classList.remove('active'); }, 3000);
+  }
+  function closePopup(){ popup.classList.remove('active'); }
+
+  // if you need a server-side proxy (PHP) due to CORS, here's a short example:
+  /*
+  // PHP endpoint (server-side) example (do not put API key in client-side)
+  // save this as /api/sabuss-proxy.php on your server and call it from browser with fetch('/api/sabuss-proxy.php', {method:'POST', body: formData})
+  <?php
+    $apiKey = '69MOSFI0Y...';
+    $url = 'https://sabuss.com/vtu/api/buy/' . $apiKey;
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER,1);
+    curl_setopt($ch, CURLOPT_POST,1);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $_POST);
+    $resp = curl_exec($ch);
+    curl_close($ch);
+    header('Content-Type: application/json');
+    echo $resp;
+  ?>
+  */
+
+  // initial render setup (choose default network)
+  renderPlans(networkSelect.value);
+
+</script>
+</body>
+</html>

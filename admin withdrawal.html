@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Admin Withdrawal Verification</title>
+<style>
+  body {
+    background: #020411;
+    color: white;
+    font-family: Poppins, sans-serif;
+    padding: 20px;
+  }
+
+  .item {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(0,255,255,0.3);
+    padding: 15px;
+    border-radius: 12px;
+    margin-bottom: 15px;
+  }
+
+  button {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 8px;
+    margin-right: 10px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .approve { background: #00ff90; }
+  .decline { background: #ff3b3b; }
+</style>
+</head>
+
+<body>
+
+<h2>Withdrawal Verification (Admin Only)</h2>
+
+<div id="withdrawList"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { 
+  getFirestore, 
+  collection, 
+  getDocs, 
+  doc,
+  updateDoc,
+  getDoc,
+  onSnapshot 
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDim9k5CHfNythq6ORypN_RfwyLNMuxVLs",
+  authDomain: "sign-2fd98.firebaseapp.com",
+  projectId: "sign-2fd98",
+  storageBucket: "sign-2fd98.appspot.com",
+  messagingSenderId: "548682903618",
+  appId: "1:548682903618:web:0f0ca286f902c7fbacfddb"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+onAuthStateChanged(auth, async (u) => {
+  if (!u) return location.href = "login.html";
+
+  // 🔐 ONLY ADMIN CAN ENTER HERE
+  if (u.email !== "YOUR_ADMIN_EMAIL@gmail.com") {
+    alert("Access Denied");
+    location.href = "dashboard.html";
+    return;
+  }
+
+  loadWithdrawals();
+});
+
+async function loadWithdrawals() {
+  const usersRef = collection(db, "users");
+  const usersSnap = await getDocs(usersRef);
+
+  let html = "";
+
+  for (let userDoc of usersSnap.docs) {
+    let uid = userDoc.id;
+
+    const wRef = collection(db, "users", uid, "withdrawals");
+    const wSnap = await getDocs(wRef);
+
+    wSnap.forEach(w => {
+      const data = w.data();
+
+      html += `
+        <div class="item">
+          <p><b>User:</b> ${userDoc.data().email}</p>
+          <p><b>Amount:</b> ₦${data.amount}</p>
+          <p><b>Status:</b> ${data.status}</p>
+
+          <button class="approve" onclick="approve('${uid}', '${w.id}')">Approve</button>
+          <button class="decline" onclick="decline('${uid}', '${w.id}', ${data.amount})">Decline</button>
+        </div>
+      `;
+    });
+  }
+
+  document.getElementById("withdrawList").innerHTML = html;
+}
+
+window.approve = async (uid, wid) => {
+  await updateDoc(doc(db, "users", uid, "withdrawals", wid), {
+    status: "successful"
+  });
+
+  alert("Approved!");
+  loadWithdrawals();
+};
+
+window.decline = async (uid, wid, amount) => {
+  const userRef = doc(db, "users", uid);
+  const snap = await getDoc(userRef);
+  let bal = snap.data().balance;
+
+  // refund the user
+  await updateDoc(userRef, { balance: bal + amount });
+
+  // update withdrawal status
+  await updateDoc(doc(db, "users", uid, "withdrawals", wid), {
+    status: "declined"
+  });
+
+  alert("Declined & Refunded!");
+  loadWithdrawals();
+};
+
+</script>
+
+</body>
+</html>

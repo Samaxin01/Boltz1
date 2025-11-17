@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Buy Data</title>
+<style>
+body {
+  font-family: Arial;
+  background: #f6f7fb;
+  padding: 20px;
+}
+
+.container {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 0 20px rgba(0,0,0,0.1);
+  max-width: 400px;
+  margin: auto;
+}
+
+select, input {
+  width: 100%;
+  padding: 12px;
+  margin: 10px 0;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+button {
+  width: 100%;
+  padding: 14px;
+  background: #0095ff;
+  color: white;
+  font-size: 18px;
+  border: none;
+  border-radius: 6px;
+}
+
+#popupSuccess, #popupError {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  background: white;
+  padding: 30px;
+  border-radius: 10px;
+  text-align: center;
+  box-shadow: 0 0 30px rgba(0,0,0,0.2);
+  transition: 0.3s;
+  z-index: 999;
+}
+
+.show {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.success {
+  color: #00c853;
+  font-size: 22px;
+}
+
+.error {
+  color: red;
+  font-size: 22px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+  <h2>Buy Data</h2>
+
+  <label>Network</label>
+  <select id="network" onchange="loadPlans()">
+    <option value="">Select Network</option>
+    <option value="mtn">MTN</option>
+    <option value="airtel">Airtel</option>
+    <option value="glo">Glo</option>
+    <option value="9mobile">9mobile</option>
+  </select>
+
+  <label>Plan</label>
+  <select id="plan">
+    <option value="">Select Plan</option>
+  </select>
+
+  <label>Phone Number</label>
+  <input type="text" id="phone" placeholder="08012345678">
+
+  <button onclick="buyData()">Buy Data</button>
+</div>
+
+<!-- SUCCESS POPUP -->
+<div id="popupSuccess">
+  <div class="success">✔ Data Purchase Successful!</div>
+</div>
+
+<!-- ERROR POPUP -->
+<div id="popupError">
+  <div class="error">❌ Transaction Failed!</div>
+</div>
+
+<script>
+const plans = {
+  mtn: [
+    { id: 1, name: "100MB – ₦100" },
+    { id: 2, name: "1GB – ₦500" },
+    { id: 3, name: "2GB – ₦900" }
+  ],
+
+  airtel: [
+    { id: 10, name: "500MB – ₦290" },
+    { id: 11, name: "1GB – ₦480" }
+  ],
+
+  glo: [
+    { id: 20, name: "1GB – ₦450" }
+  ],
+
+  "9mobile": [
+    { id: 30, name: "1.5GB – ₦900" }
+  ]
+};
+
+function loadPlans() {
+  let network = document.getElementById("network").value;
+  let planSelect = document.getElementById("plan");
+
+  planSelect.innerHTML = "<option value=''>Select Plan</option>";
+
+  if (plans[network]) {
+    plans[network].forEach(p => {
+      planSelect.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+    });
+  }
+}
+
+function pop(id) {
+  const el = document.getElementById(id);
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 3000);
+}
+
+async function buyData() {
+  let phone = document.getElementById("phone").value;
+  let plan_id = document.getElementById("plan").value;
+
+  if (!phone || !plan_id) {
+    pop("popupError");
+    return;
+  }
+
+  let form = new FormData();
+  form.append("phone", phone);
+  form.append("plan_id", plan_id);
+
+  let res = await fetch("https://boltz-eta.vercel.app/buydata.php", {
+    method: "POST",
+    body: form
+  });
+
+  let data = await res.json();
+
+  if (data.status == 200) {
+    pop("popupSuccess");
+  } else {
+    pop("popupError");
+  }
+}
+</script>
+
+</body>
+</html>
